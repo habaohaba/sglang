@@ -81,7 +81,7 @@ class PrefillBootstrapQueue:
         self.tp_size = tp_size
         self.transfer_backend = transfer_backend
         self.scheduler = scheduler
-        self.kv_manager = self._init_kv_manager()
+        self.kv_manager = self._init_kv_manager() # construct a kv manager when bootstrap queue is created
         self.queue: List[Req] = []
         self.gloo_group = gloo_group
         self.bootstrap_port = bootstrap_port
@@ -115,9 +115,10 @@ class PrefillBootstrapQueue:
         kv_args.ib_device = self.scheduler.server_args.disaggregation_ib_device
         kv_args.gpu_id = self.scheduler.gpu_id
         kv_manager_class = get_kv_class(self.transfer_backend, KVClassType.MANAGER)
+        # construct a kv manager for prefill mode
         kv_manager = kv_manager_class(
             kv_args,
-            DisaggregationMode.PREFILL,
+            DisaggregationMode.PREFILL, # prefill mode
             self.scheduler.server_args,
             self.is_mla_backend,
         )
@@ -129,6 +130,7 @@ class PrefillBootstrapQueue:
             kv_sender_class = get_kv_class(TransferBackend.FAKE, KVClassType.SENDER)
         else:
             kv_sender_class = get_kv_class(self.transfer_backend, KVClassType.SENDER)
+        # set kv sender for the request, construct a kv sender
         req.disagg_kv_sender = kv_sender_class(
             mgr=self.kv_manager,
             bootstrap_addr=f"{req.bootstrap_host}:{self.bootstrap_port}",
@@ -151,14 +153,17 @@ class PrefillBootstrapQueue:
         if len(self.queue) == 0:
             return []
 
+        # kv sender will poll to check the status of the request
         polls = poll_and_all_reduce(
             [req.disagg_kv_sender for req in self.queue], self.gloo_group
         )
 
         for i, (req, poll) in enumerate(zip(self.queue, polls)):
             if poll == KVPoll.Bootstrapping:
+                # still bootstrapping 1, skip
                 continue
             elif poll == KVPoll.Failed:
+                # bootstrap failed 0, raise exception
                 error_message = f"Prefill bootstrap failed for request rank={self.tp_rank} {req.rid=} {req.bootstrap_room=}"
                 try:
                     req.disagg_kv_sender.failure_exception()
@@ -172,7 +177,7 @@ class PrefillBootstrapQueue:
                 indices_to_remove.add(i)
                 continue
 
-            # KV.WaitingForInput
+            # KV.WaitingForInput 2
             num_kv_indices = len(req.origin_input_ids)
             if self.req_to_metadata_buffer_idx_allocator.available_size() == 0:
                 break

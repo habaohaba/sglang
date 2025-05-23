@@ -2064,6 +2064,7 @@ def get_local_ip_by_remote() -> str:
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))  # Doesn't need to be reachable
+        # get ip address and port number for local socket
         return s.getsockname()[0]
     except Exception:
         pass

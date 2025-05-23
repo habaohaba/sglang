@@ -23,6 +23,9 @@ class DisaggregationMode(Enum):
 
 
 def poll_and_all_reduce(pollers, gloo_group):
+    """
+    poll the status of the pollers and all reduce the results
+    """
     polls = [int(poller.poll()) for poller in pollers]
     tensor_to_reduce = torch.tensor(polls, dtype=torch.uint8, device="cpu")
     dist.all_reduce(tensor_to_reduce, op=dist.ReduceOp.MIN, group=gloo_group)

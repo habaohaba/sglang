@@ -62,7 +62,7 @@ if TYPE_CHECKING:
 class DecodeRequest:
     req: Req
     kv_receiver: BaseKVReceiver
-    waiting_for_input: bool = False
+    waiting_for_input: bool = False # waiting for kv cache from prefill engine
     metadata_buffer_index: int = -1
 
 
@@ -109,7 +109,7 @@ class DecodePreallocQueue:
         # Queue for requests pending pre-allocation
         self.queue: List[DecodeRequest] = []
         self.transfer_backend = transfer_backend
-        self.kv_manager = self._init_kv_manager()
+        self.kv_manager = self._init_kv_manager() # decode mode kv manager
 
     def _init_kv_manager(self) -> BaseKVManager:
         kv_args = KVArgs()
@@ -151,6 +151,7 @@ class DecodePreallocQueue:
             kv_receiver_class = get_kv_class(
                 self.transfer_backend, KVClassType.RECEIVER
             )
+        # construct a kv receiver for decode mode
         kv_receiver = kv_receiver_class(
             mgr=self.kv_manager,
             bootstrap_addr=f"{req.bootstrap_host}:{req.bootstrap_port}",

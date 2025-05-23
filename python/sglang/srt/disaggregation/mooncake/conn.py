@@ -145,9 +145,11 @@ class MooncakeKVManager(BaseKVManager):
         self.server_socket = zmq.Context().socket(zmq.PULL)
         self.register_buffer_to_engine()
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
+            # prefill mode kv manager
             self.transfer_queue = queue.Queue()
             self.transfer_infos: Dict[int, Dict[str, TransferInfo]] = {}
             self.decode_kv_args_table: Dict[str, KVArgsRegisterInfo] = {}
+            # start different threads for prefill and decode
             self.start_prefill_thread()
             self._register_to_bootstrap()
 
@@ -157,6 +159,7 @@ class MooncakeKVManager(BaseKVManager):
                 min(cpu_count // 4, 16)
             )
         elif self.disaggregation_mode == DisaggregationMode.DECODE:
+            # decode mode kv manager
             self.start_decode_thread()
             self.connection_pool: Dict[str, Dict[str, Union[str, int]]] = {}
             self.prefill_tp_size_table: Dict[str, int] = {}
@@ -270,6 +273,7 @@ class MooncakeKVManager(BaseKVManager):
         )
 
     def start_prefill_thread(self):
+        # new port for prefill thread
         self.rank_port = get_free_port()
         self.server_socket.bind(f"tcp://{get_local_ip_by_remote()}:{self.rank_port}")
 
@@ -299,6 +303,7 @@ class MooncakeKVManager(BaseKVManager):
                     )
                     # NOTE: after bootstrapping we can mark the req as waiting for input
                     if len(self.transfer_infos[room]) == required_dst_info_num:
+                        # change request status to waiting for input
                         self.update_status(room, KVPoll.WaitingForInput)
 
         def transfer_thread():
@@ -374,6 +379,7 @@ class MooncakeKVManager(BaseKVManager):
         threading.Thread(target=transfer_thread).start()
 
     def start_decode_thread(self):
+        # new port for decode thread
         self.rank_port = get_free_port()
         self.server_socket.bind(f"tcp://{get_local_ip_by_remote()}:{self.rank_port}")
 
@@ -502,8 +508,8 @@ class MooncakeKVSender(BaseKVSender):
 
 class MooncakeKVReceiver(BaseKVReceiver):
     _ctx = zmq.Context()
-    _socket_cache = {}
-    _socket_locks = {}
+    _socket_cache = {} # socket for the endpoint
+    _socket_locks = {} # lock for the endpoint
     _global_lock = threading.Lock()
 
     def __init__(
@@ -688,6 +694,9 @@ class MooncakeKVReceiver(BaseKVReceiver):
 
     @classmethod
     def _connect(cls, endpoint: str):
+        """
+        connect to the endpoint
+        """
         with cls._global_lock:
             if endpoint not in cls._socket_cache:
                 sock = cls._ctx.socket(zmq.PUSH)
@@ -738,6 +747,7 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
         self.tp_size = None
         self.dp_size = None
         self.tp_size_per_dp_rank = None
+        # prefill port table: dp_group -> tp_rank -> rank_ip and rank_port
         self.prefill_port_table: Dict[int, Dict[int, Dict[str, Union[str, int]]]] = {}
 
         # Start bootstrap server
@@ -748,6 +758,9 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
         self.thread.start()
 
     def _setup_routes(self):
+        """
+        set route to put and get handler
+        """
         self.app.router.add_route("*", "/route", self._handle_route)
 
     async def _handle_route(self, request: web.Request):
@@ -762,6 +775,9 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
             )
 
     async def _handle_route_put(self, request: web.Request):
+        """
+        kv sender will put the bootstrap info to the bootstrap server
+        """
         data = await request.json()
         role = data["role"]
         tp_size = data["tp_size"]
@@ -789,6 +805,7 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
                 if dp_group not in self.prefill_port_table:
                     self.prefill_port_table[dp_group] = {}
 
+            # update the prefill port table
             self.prefill_port_table[dp_group][tp_rank_in_dp_group] = {
                 "rank_ip": rank_ip,
                 "rank_port": rank_port,
@@ -800,6 +817,9 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
         return web.Response(text="OK", status=200)
 
     async def _handle_route_get(self, request: web.Request):
+        """
+        kv receiver will get the bootstrap info from the bootstrap server
+        """
         engine_rank = request.query.get("engine_rank")
         target_dp_group = request.query.get("target_dp_group")
         if not engine_rank or not target_dp_group:
@@ -815,6 +835,7 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
 
         # Find corresponding prefill info
         async with self.lock:
+            # get the prefill info from the prefill port table
             bootstrap_info = self.prefill_port_table[int(target_dp_group)][
                 int(engine_rank)
             ]

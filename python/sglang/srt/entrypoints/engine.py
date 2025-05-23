@@ -566,27 +566,37 @@ def _launch_subprocesses(
 
         scheduler_pipe_readers = []
 
+        # each tp group node number
         nnodes_per_tp_group = max(server_args.nnodes // server_args.pp_size, 1)
+        # each node tp size
         tp_size_per_node = server_args.tp_size // nnodes_per_tp_group
+        # each node tp rank list
         tp_rank_range = range(
+            # allocate each node to a tp group
             tp_size_per_node * (server_args.node_rank % nnodes_per_tp_group),
             tp_size_per_node * (server_args.node_rank % nnodes_per_tp_group + 1),
         )
 
+        # each node pp size
         pp_size_per_node = max(server_args.pp_size // server_args.nnodes, 1)
+        # each node pp rank list
         pp_rank_range = range(
             pp_size_per_node * (server_args.node_rank // nnodes_per_tp_group),
             pp_size_per_node * (server_args.node_rank // nnodes_per_tp_group + 1),
         )
 
+        # pp rank and tp rank together to get a unique rank in the whole cluster
         for pp_rank in pp_rank_range:
+            # pp rank in each node
             for tp_rank in tp_rank_range:
+                # tp rank in each node
                 reader, writer = mp.Pipe(duplex=False)
                 gpu_id = (
                     server_args.base_gpu_id
                     + ((pp_rank % pp_size_per_node) * tp_size_per_node)
                     + (tp_rank % tp_size_per_node) * server_args.gpu_id_step
                 )
+                # every rank has a scheduler process
                 proc = mp.Process(
                     target=run_scheduler_process,
                     args=(

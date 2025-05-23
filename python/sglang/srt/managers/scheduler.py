@@ -888,6 +888,7 @@ class Scheduler(
                 self.return_health_check_ct += 1
                 continue
 
+            # dispatch the request to the corresponding handler, call handler to process the request
             output = self._request_dispatcher(recv_req)
             if output is not None:
                 if isinstance(output, RpcReqOutput):
@@ -906,6 +907,7 @@ class Scheduler(
             or recv_req.session_params.id is None
             or recv_req.session_params.id not in self.sessions
         ):
+            # have no session
             if recv_req.input_embeds is not None:
                 # Generate fake input_ids based on the length of input_embeds
                 seq_length = len(recv_req.input_embeds)
@@ -939,6 +941,7 @@ class Scheduler(
             if self.disaggregation_mode != DisaggregationMode.NULL:
                 # Invalid request for disaggregated mode
                 if recv_req.bootstrap_room is None:
+                    # require bootstrap_room for disaggregated mode
                     error_message = (
                         f"Invalid request: Disaggregated request received without "
                         f"boostrap room id. {req.rid=}"

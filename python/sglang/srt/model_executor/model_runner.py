@@ -406,6 +406,9 @@ class ModelRunner:
             logger.info("Chunked prefix cache is turned on.")
 
     def init_torch_distributed(self):
+        """
+        return min_per_gpu_memory
+        """
         logger.info("Init torch distributed begin.")
 
         try:

@@ -34,8 +34,11 @@ def compute_dp_attention_world_info(enable_dp_attention, tp_rank, tp_size, dp_si
     if not enable_dp_attention:
         return tp_rank, tp_size, 0
 
+    # each dp group tp size
     attn_tp_size = tp_size // dp_size
+    # each dp group dp rank
     attn_dp_rank = tp_rank // attn_tp_size
+    # each dp group tp rank
     attn_tp_rank = tp_rank % attn_tp_size
 
     return attn_tp_rank, attn_tp_size, attn_dp_rank
