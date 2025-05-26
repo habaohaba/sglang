@@ -741,6 +741,10 @@ class MooncakeKVReceiver(BaseKVReceiver):
 
 
 class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
+    """
+    bootstrap server only exist in prefill node
+    """
+
     def __init__(self, port: int):
         self.port = port
         self.app = web.Application()
@@ -753,7 +757,7 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
         # prefill port table: dp_group -> tp_rank -> rank_ip and rank_port
         self.prefill_port_table: Dict[int, Dict[int, Dict[str, Union[str, int]]]] = {}
 
-        # Start bootstrap server
+        # Start bootstrap server in a new thread
         self.thread = threading.Thread(target=self._run_server, daemon=True)
         self.run()
 
@@ -855,8 +859,10 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
             asyncio.set_event_loop(self._loop)
 
             self._runner = web.AppRunner(self.app)
+            # block until the server is ready
             self._loop.run_until_complete(self._runner.setup())
 
+            # block until the tcp server site is ready
             site = web.TCPSite(self._runner, port=self.port)
             self._loop.run_until_complete(site.start())
             self._loop.run_forever()

@@ -559,6 +559,7 @@ def _launch_subprocesses(
 
     scheduler_procs = []
     if server_args.dp_size == 1:
+        # data parallel size is 1, so only launch tensor parallel scheduler processes
         # Launch tensor parallel scheduler processes
         memory_saver_adapter = TorchMemorySaverAdapter.create(
             enable=server_args.enable_memory_saver
@@ -645,7 +646,7 @@ def _launch_subprocesses(
             )
         return None, None
 
-    # Launch detokenizer process
+    # Launch detokenizer process, every engine has a detokenizer manager
     detoken_proc = mp.Process(
         target=run_detokenizer_process,
         args=(
@@ -655,7 +656,7 @@ def _launch_subprocesses(
     )
     detoken_proc.start()
 
-    # Launch tokenizer process
+    # Launch tokenizer process, every engine has a tokenizer manager
     tokenizer_manager = TokenizerManager(server_args, port_args)
     if server_args.chat_template:
         load_chat_template_for_openai_api(

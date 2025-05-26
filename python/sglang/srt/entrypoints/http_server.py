@@ -264,6 +264,7 @@ async def generate_request(obj: GenerateReqInput, request: Request):
         )
     else:
         try:
+            # tokenizer manager will handle the request and return the response
             ret = await _global_state.tokenizer_manager.generate_request(
                 obj, request
             ).__anext__()
