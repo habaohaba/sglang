@@ -88,6 +88,18 @@ class SchedulePolicy:
         )
 
     def calc_priority(self, waiting_queue: List[Req]) -> bool:
+        """Calculate priority for requests in the waiting queue based on the scheduling policy.
+
+        This method implements different scheduling policies to determine the order of requests:
+        - For cache-aware policies (LPM, DFS_WEIGHT), it computes prefix matches and sorts accordingly
+        - For cache-agnostic policies (FCFS, LOF, RANDOM), it applies the corresponding sorting strategy
+
+        Args:
+            waiting_queue: List of requests waiting to be processed
+
+        Returns:
+            bool: True if prefix computation was performed (for cache-aware policies), False otherwise
+        """
         if self.policy == CacheAgnosticPolicy.FCFS:
             # A shortcut for FCFS
             return

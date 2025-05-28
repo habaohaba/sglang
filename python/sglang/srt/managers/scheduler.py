@@ -1344,6 +1344,9 @@ class Scheduler(
         return ret
 
     def get_num_allocatable_reqs(self, running_bs):
+        """
+        get the number of allocatable requests
+        """
         res = global_server_args_dict["max_micro_batch_size"] - running_bs
         if self.pp_size > 1:
             res = min(res, self.req_to_token_pool.available_size())
