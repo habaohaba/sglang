@@ -196,7 +196,7 @@ class Scheduler(
         self.server_args = server_args
         self.tp_rank = tp_rank
         self.pp_rank = pp_rank
-        self.tp_size = server_args.tp_size
+        self.tp_size = server_args.tp_size # all tp size
         self.pp_size = server_args.pp_size
         self.dp_size = server_args.dp_size
         self.schedule_policy = server_args.schedule_policy
@@ -215,6 +215,7 @@ class Scheduler(
         self.page_size = server_args.page_size
         # Distributed rank info
         self.dp_size = server_args.dp_size
+        # attn_tp_size is the tp size of dp attention group
         self.attn_tp_rank, self.attn_tp_size, self.attn_dp_rank = (
             compute_dp_attention_world_info(
                 server_args.enable_dp_attention,

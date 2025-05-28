@@ -31,6 +31,9 @@ _LOCAL_ATTN_DP_RANK = None
 
 
 def compute_dp_attention_world_info(enable_dp_attention, tp_rank, tp_size, dp_size):
+    """
+    compute dp attention tp rank and dp rank
+    """
     if not enable_dp_attention:
         return tp_rank, tp_size, 0
 

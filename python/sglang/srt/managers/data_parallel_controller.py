@@ -186,12 +186,14 @@ class DataParallelController:
         nnodes_per_tp_group = max(server_args.nnodes // server_args.pp_size, 1)
         tp_size_per_node = server_args.tp_size // nnodes_per_tp_group
         tp_rank_range = range(
+            # all the node in a tp group tp rank construct whole tp group
             tp_size_per_node * (server_args.node_rank % nnodes_per_tp_group),
             tp_size_per_node * (server_args.node_rank % nnodes_per_tp_group + 1),
         )
 
         pp_size_per_node = max(server_args.pp_size // server_args.nnodes, 1)
         pp_rank_range = range(
+            # each tp group is in the same pp rank
             pp_size_per_node * (server_args.node_rank // nnodes_per_tp_group),
             pp_size_per_node * (server_args.node_rank // nnodes_per_tp_group + 1),
         )
@@ -222,6 +224,7 @@ class DataParallelController:
                     + (tp_rank % tp_size_per_node) * server_args.gpu_id_step
                 )
                 proc = mp.Process(
+                    # run scheduler process for this gpu
                     target=run_scheduler_process,
                     args=(
                         server_args,
@@ -276,6 +279,7 @@ class DataParallelController:
                     self.dispatching(recv_req)
                 else:
                     # Send other control messages to first worker of tp group
+                    # [start:end:step] index
                     for worker in self.workers[:: self.control_message_step]:
                         worker.send_pyobj(recv_req)
 

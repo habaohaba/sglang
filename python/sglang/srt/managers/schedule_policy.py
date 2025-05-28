@@ -280,13 +280,13 @@ class PrefillAdder:
         self.token_to_kv_pool_allocator = token_to_kv_pool_allocator
         self.running_batch = running_batch
         self.new_token_ratio = new_token_ratio
-        self.rem_input_tokens = rem_input_tokens - mixed_with_decode_tokens
-        self.rem_chunk_tokens = rem_chunk_tokens
+        self.rem_input_tokens = rem_input_tokens - mixed_with_decode_tokens # remaining input tokens
+        self.rem_chunk_tokens = rem_chunk_tokens  # remaining chunk tokens
         if self.rem_chunk_tokens is not None:
             self.rem_chunk_tokens -= mixed_with_decode_tokens
 
-        self.rem_total_token_offset = mixed_with_decode_tokens
-        self.cur_rem_token_offset = mixed_with_decode_tokens
+        self.rem_total_token_offset = mixed_with_decode_tokens # remaining total tokens offset
+        self.cur_rem_token_offset = mixed_with_decode_tokens # current remaining total tokens offset
 
         self.req_states = None
         self.can_run_list = []
@@ -452,6 +452,7 @@ class PrefillAdder:
             req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS_ESTIMATION
         )
         input_tokens = (
+            # celling division
             -(-req.extend_input_len // self.tree_cache.page_size)
             * self.tree_cache.page_size
         )

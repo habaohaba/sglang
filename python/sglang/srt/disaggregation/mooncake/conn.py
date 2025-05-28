@@ -749,7 +749,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         bootstrap_room: Optional[int] = None,
     ):
         self.bootstrap_room = bootstrap_room
-        self.bootstrap_addr = bootstrap_addr
+        self.bootstrap_addr = bootstrap_addr  # bootstrap_addr is the address of the prefill server
         self.kv_mgr = mgr
         self.session_id = self.kv_mgr.get_session_id()
         self.kv_mgr.update_status(self.bootstrap_room, KVPoll.Bootstrapping)

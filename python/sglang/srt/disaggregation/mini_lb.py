@@ -58,6 +58,9 @@ class MiniLoadBalancer:
         self.decode_servers.append(new_decode_server)
 
     def select_pair(self):
+        """
+        Select a prefill server and a decode server.
+        """
         # TODO: return some message instead of panic
         assert len(self.prefill_configs) > 0, "No prefill servers available"
         assert len(self.decode_servers) > 0, "No decode servers available"
@@ -362,6 +365,12 @@ async def register(obj: PDRegistryRequest):
 
 
 def run(prefill_configs, decode_addrs, host, port):
+    """
+        prefill_configs: List[PrefillConfig]
+        decode_addrs: urls for decode servers
+        host: host to bind the server
+        port: port to bind the server
+    """
     global load_balancer
     load_balancer = MiniLoadBalancer(prefill_configs, decode_addrs)
     uvicorn.run(app, host=host, port=port)
