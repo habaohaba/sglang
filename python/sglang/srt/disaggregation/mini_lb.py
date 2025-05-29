@@ -251,7 +251,7 @@ async def handle_generate_request(request_data: dict):
     if batch_size is not None:
         modified_request.update(
             {
-                "bootstrap_host": [hostname] * batch_size,
+                "bootstrap_host": [hostname] * batch_size, # set bootstrap host and port for each request
                 "bootstrap_port": [bootstrap_port] * batch_size,
                 "bootstrap_room": [
                     _generate_bootstrap_room() for _ in range(batch_size)
@@ -310,6 +310,9 @@ async def handle_completion_request(request_data: dict):
 
 
 def _generate_bootstrap_room():
+    """
+    generate a random bootstrap room id
+    """
     return random.randint(0, 2**63 - 1)
 
 

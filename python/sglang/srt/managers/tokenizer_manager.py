@@ -387,7 +387,6 @@ class TokenizerManager:
         )
         # Start kv boostrap server on prefill
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
-            # only start bootstrap server on prefill tm
             kv_bootstrap_server_class = get_kv_class(
                 self.transfer_backend, KVClassType.BOOTSTRAP_SERVER
             )

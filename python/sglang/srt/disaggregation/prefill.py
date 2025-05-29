@@ -171,10 +171,10 @@ class PrefillBootstrapQueue:
 
         for i, (req, poll) in enumerate(zip(self.queue, polls)):
             if poll == KVPoll.Bootstrapping:
-                # still bootstrapping 1, skip
+                # still bootstrapping, skip
                 continue
             elif poll == KVPoll.Failed:
-                # bootstrap failed 0, raise exception
+                # bootstrap failed, raise exception
                 error_message = f"Prefill bootstrap failed for request rank={self.tp_rank} {req.rid=} {req.bootstrap_room=}"
                 try:
                     req.disagg_kv_sender.failure_exception()
@@ -188,7 +188,7 @@ class PrefillBootstrapQueue:
                 indices_to_remove.add(i)
                 continue
 
-            # KV.WaitingForInput 2
+            # KV.WaitingForInput
             num_kv_indices = len(req.origin_input_ids)
             if self.req_to_metadata_buffer_idx_allocator.available_size() == 0:
                 break

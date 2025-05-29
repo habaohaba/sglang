@@ -108,7 +108,7 @@ class DecodePreallocQueue:
         # Queue for requests pending pre-allocation
         self.queue: List[DecodeRequest] = []
         self.transfer_backend = transfer_backend
-        self.kv_manager = self._init_kv_manager() # decode mode kv manager
+        self.kv_manager = self._init_kv_manager() # construct a kv manager when prealloc queue is created
 
     def _init_kv_manager(self) -> BaseKVManager:
         kv_args = KVArgs()
@@ -155,7 +155,7 @@ class DecodePreallocQueue:
         # construct a kv receiver for decode mode
         kv_receiver = kv_receiver_class(
             mgr=self.kv_manager,
-            bootstrap_addr=f"{req.bootstrap_host}:{req.bootstrap_port}",
+            bootstrap_addr=f"{req.bootstrap_host}:{req.bootstrap_port}", # bootstrap host and port will be set by load balancer
             bootstrap_room=req.bootstrap_room,
         )
         self.queue.append(DecodeRequest(req=req, kv_receiver=kv_receiver))
@@ -249,6 +249,7 @@ class DecodePreallocQueue:
             page_indices = kv_to_page_indices(
                 kv_indices, self.token_to_kv_pool_allocator.page_size
             )
+            # init method of kv receiver will notify the prefill server about the kv indices and aux index
             decode_req.kv_receiver.init(page_indices, decode_req.metadata_buffer_index)
             preallocated_reqs.append(decode_req)
             indices_to_remove.add(i)
@@ -652,6 +653,9 @@ class SchedulerDisaggregationDecodeMixin:
         return new_batch
 
     def process_decode_queue(self: Scheduler):
+        """
+        pop preallocated requests from prealloc queue, and extend to transfer queue
+        """
         req_conns = self.disagg_decode_prealloc_queue.pop_preallocated()
         self.disagg_decode_transfer_queue.extend(req_conns)
         alloc_reqs = (

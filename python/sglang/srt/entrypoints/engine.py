@@ -646,7 +646,7 @@ def _launch_subprocesses(
             )
         return None, None
 
-    # Launch detokenizer process, every engine has a detokenizer manager
+    # Launch detokenizer process
     detoken_proc = mp.Process(
         target=run_detokenizer_process,
         args=(
@@ -656,7 +656,7 @@ def _launch_subprocesses(
     )
     detoken_proc.start()
 
-    # Launch tokenizer process, every engine has a tokenizer manager
+    # Launch tokenizer process
     tokenizer_manager = TokenizerManager(server_args, port_args)
     if server_args.chat_template:
         load_chat_template_for_openai_api(

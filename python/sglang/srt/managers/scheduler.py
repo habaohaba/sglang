@@ -563,6 +563,9 @@ class Scheduler(
             self.kv_event_publisher = EventPublisherFactory.create(kv_events_config)
 
     def init_disaggregation(self):
+        """
+        Initialize the disaggregation for scheduler.
+        """
         self.transfer_backend = TransferBackend(
             self.server_args.disaggregation_transfer_backend
         )
@@ -629,7 +632,7 @@ class Scheduler(
                 tp_rank=self.tp_rank,
                 tp_size=self.tp_size,
                 bootstrap_port=self.server_args.disaggregation_bootstrap_port,
-                gloo_group=self.attn_tp_cpu_group,
+                gloo_group=self.attn_tp_cpu_group, # gloo group for prefill attention tp
                 transfer_backend=self.transfer_backend,
                 scheduler=self,
             )
@@ -1064,6 +1067,12 @@ class Scheduler(
             self._add_request_to_queue(req)
 
     def _add_request_to_queue(self, req: Req):
+        """
+        add request to the corresponding queue based on the disaggregation mode
+        - prefill: add to bootstrap queue
+        - decode: add to prealloc queue
+        - normal: add to waiting queue
+        """
         req.queue_time_start = time.perf_counter()
         if self.disaggregation_mode == DisaggregationMode.PREFILL:
             self.disagg_prefill_bootstrap_queue.add(req)

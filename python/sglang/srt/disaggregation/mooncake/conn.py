@@ -155,7 +155,7 @@ class MooncakeKVManager(BaseKVManager):
             # prefill mode kv manager
             self.transfer_infos: Dict[int, Dict[str, TransferInfo]] = {}
             self.decode_kv_args_table: Dict[str, KVArgsRegisterInfo] = {}
-            # start different threads for prefill and decode
+            # start thread for prefill
             self.start_prefill_thread()
             self._register_to_bootstrap()
             self.session_failures = defaultdict(int)
@@ -204,8 +204,9 @@ class MooncakeKVManager(BaseKVManager):
             self.max_failures = max(
                 get_int_env_var("SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE", 2), 1
             )
+            # start thread for decode
             self.start_decode_thread()
-            self.connection_pool: Dict[str, Dict[str, Union[str, int]]] = {}
+            self.connection_pool: Dict[str, Dict[str, Union[str, int]]] = {} # receiver kv manager will have connection pool, mapping from bootstrap key to bootstrap info
             self.prefill_tp_size_table: Dict[str, int] = {}
             self.prefill_dp_size_table: Dict[str, int] = {}
         else:
@@ -434,6 +435,7 @@ class MooncakeKVManager(BaseKVManager):
                 )
 
     def start_prefill_thread(self):
+        # new port for prefill thread
         self.rank_port = get_free_port()
         self.server_socket.bind(f"tcp://{get_local_ip_by_remote()}:{self.rank_port}")
 
@@ -678,11 +680,11 @@ class MooncakeKVSender(BaseKVSender):
     ):
         self.kv_mgr = mgr
         self.bootstrap_room = bootstrap_room
-        self.kv_mgr.update_status(bootstrap_room, KVPoll.Bootstrapping)
+        self.kv_mgr.update_status(bootstrap_room, KVPoll.Bootstrapping) # start bootstrapping, handshaking
         self.aux_index = None
         self.bootstrap_server_url = bootstrap_addr
         self.init_time = time.time()
-        self.conclude_state = None
+        self.conclude_state = None # the final state of the request
         # inner state
         self.curr_idx = 0
 
@@ -712,11 +714,15 @@ class MooncakeKVSender(BaseKVSender):
             )
 
     def poll(self) -> KVPoll:
+        """
+        poll the status of the request
+        """
         if self.conclude_state is None:
             status = self.kv_mgr.check_status(self.bootstrap_room)
             if status in (KVPoll.Success, KVPoll.Failed):
                 self.conclude_state = status
             elif status == KVPoll.Bootstrapping:
+                # when bootstrapping, check the timeout
                 now = time.time()
                 elapsed = now - self.init_time
                 if elapsed >= self.kv_mgr.bootstrap_time_out:
@@ -848,6 +854,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         )
 
         if bootstrap_key not in self.kv_mgr.connection_pool:
+            # new bootstrap key, fetch bootstrap info from bootstrap server
             bootstrap_infos = []
             for target_tp_rank in self.target_tp_ranks:
                 bootstrap_info = self._get_bootstrap_info_from_server(
@@ -863,6 +870,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
                     logger.debug(
                         f"Fetched bootstrap info: {bootstrap_info} for DP {self.target_dp_group} TP {target_tp_rank}"
                     )
+                    # add new bootstrap info
                     bootstrap_infos.append(bootstrap_info)
                 else:
                     self.kv_mgr.record_failure(
@@ -873,11 +881,13 @@ class MooncakeKVReceiver(BaseKVReceiver):
                     return
 
             self.bootstrap_infos = bootstrap_infos
+            # add new bootstrap info to connection pool
             self.kv_mgr.connection_pool[bootstrap_key] = self.bootstrap_infos
 
             # Register kv_args only once to prefill KVManager according to the info fetched from the bootstrap server
             self._register_kv_args()
         else:
+            # already have bootstrap info, use the cached info
             self.bootstrap_infos = self.kv_mgr.connection_pool[bootstrap_key]
 
         assert len(self.bootstrap_infos) > 0
@@ -906,6 +916,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
     def _get_prefill_parallel_info_from_server(self) -> Tuple[int, int]:
         """Fetch the prefill parallel info from the bootstrap server."""
         try:
+            # use engine_rank=-1 and target_dp_group=-1 to get prefill parallel info
             url = f"http://{self.bootstrap_addr}/route?engine_rank={-1}&target_dp_group={-1}"
             response = requests.get(url)
             if response.status_code == 200:
@@ -961,6 +972,10 @@ class MooncakeKVReceiver(BaseKVReceiver):
             return cls._socket_cache[endpoint], cls._socket_locks[endpoint]
 
     def init(self, kv_indices: npt.NDArray[np.int64], aux_index: Optional[int] = None):
+        """
+        notify the prefill server about the kv indices and aux index
+        maybe change the request status to waiting for input and finish bootstrapping
+        """
         for bootstrap_info in self.bootstrap_infos:
             self.prefill_server_url = (
                 f"{bootstrap_info['rank_ip']}:{bootstrap_info['rank_port']}"
@@ -969,6 +984,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
 
             sock, lock = self._connect("tcp://" + self.prefill_server_url)
             with lock:
+                # send to prefill server, the prefill rank and port have registered to bootstrap server
                 sock.send_multipart(
                     [
                         str(self.bootstrap_room).encode("ascii"),
@@ -1116,6 +1132,7 @@ class MooncakeKVBootstrapServer(BaseKVBootstrapServer):
         # Find corresponding prefill info
         async with self.lock:
             # get the prefill info from the prefill port table
+            # return rank ip and rank port
             bootstrap_info = self.prefill_port_table[int(target_dp_group)][
                 int(engine_rank)
             ]

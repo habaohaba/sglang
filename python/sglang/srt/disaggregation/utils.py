@@ -46,6 +46,7 @@ def poll_and_all_reduce(pollers, gloo_group):
     else:
         polls = [int(poller.poll()) for poller in pollers]
     tensor_to_reduce = torch.tensor(polls, dtype=torch.uint8, device="cpu")
+    # use min to make sure all cpu in the group have finished
     dist.all_reduce(tensor_to_reduce, op=dist.ReduceOp.MIN, group=gloo_group)
     return tensor_to_reduce.tolist()
 
