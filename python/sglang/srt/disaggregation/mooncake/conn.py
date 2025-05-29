@@ -140,8 +140,8 @@ class MooncakeKVManager(BaseKVManager):
         # for p/d multi node infer
         self.bootstrap_port = server_args.disaggregation_bootstrap_port
         self.dist_init_addr = server_args.dist_init_addr
-        self.tp_size = server_args.tp_size
-        self.dp_size = server_args.dp_size
+        self.tp_size = server_args.tp_size # all tp size
+        self.dp_size = server_args.dp_size # all dp size
         self.enable_dp_attention = server_args.enable_dp_attention
         if not server_args.enable_dp_attention and server_args.dp_size != 1:
             raise ValueError(
@@ -175,12 +175,14 @@ class MooncakeKVManager(BaseKVManager):
                 f"The environment variable SGLANG_DISAGGREGATION_THREAD_POOL_SIZE={transfer_thread_pool_size} must be "
                 f"greater than or equal to SGLANG_DISAGGREGATION_QUEUE_SIZE={transfer_queue_size}."
             )
+            # construct thread pool for each transfer queue
             self.executors = [
                 concurrent.futures.ThreadPoolExecutor(
                     transfer_thread_pool_size // transfer_queue_size
                 )
                 for _ in range(transfer_queue_size)
             ]
+            # launch transfer thread for each transfer queue
             for queue, executor in zip(self.transfer_queues, self.executors):
                 threading.Thread(
                     target=self.transfer_worker, args=(queue, executor), daemon=True
@@ -322,6 +324,9 @@ class MooncakeKVManager(BaseKVManager):
     def transfer_worker(
         self, queue: FastQueue, executor: concurrent.futures.ThreadPoolExecutor
     ):
+        """
+        transfer thread for each transfer queue
+        """
         while True:
             try:
                 kv_chunk: TransferKVChunk = queue.get()
@@ -764,17 +769,18 @@ class MooncakeKVReceiver(BaseKVReceiver):
     def __init__(
         self,
         mgr: MooncakeKVManager,
-        bootstrap_addr: str,
+        bootstrap_addr: str, # example host:port
         bootstrap_room: Optional[int] = None,
     ):
         self.bootstrap_room = bootstrap_room
-        self.bootstrap_addr = bootstrap_addr  # bootstrap_addr is the address of the prefill server
+        self.bootstrap_addr = bootstrap_addr  # bootstrap_addr is the address of the prefill server, will be set by load balancer
         self.kv_mgr = mgr
         self.session_id = self.kv_mgr.get_session_id()
         self.kv_mgr.update_status(self.bootstrap_room, KVPoll.Bootstrapping)
         self.conclude_state = None
 
         if self.bootstrap_addr not in self.kv_mgr.prefill_dp_size_table:
+            # new bootstrap addr, fetch prefill parallel info from bootstrap server
             self.prefill_tp_size, self.prefill_dp_size = (
                 self._get_prefill_parallel_info_from_server()
             )
@@ -805,7 +811,9 @@ class MooncakeKVReceiver(BaseKVReceiver):
 
         # Currently, we don't allow prefill instance and decode instance to
         # have different TP sizes per DP rank, except for models using MLA.
+        # decode local tp size per dp rank
         local_tp_size_per_dp_rank = self.kv_mgr.tp_size // self.kv_mgr.dp_size
+        # prefill tp size per dp rank
         prefill_tp_size_per_dp_rank = self.prefill_tp_size // self.prefill_dp_size
         if local_tp_size_per_dp_rank == prefill_tp_size_per_dp_rank:
             self.target_tp_rank = (

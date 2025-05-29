@@ -137,7 +137,7 @@ class PrefillBootstrapQueue:
             kv_sender_class = get_kv_class(TransferBackend.FAKE, KVClassType.SENDER)
         else:
             kv_sender_class = get_kv_class(self.transfer_backend, KVClassType.SENDER)
-        # set kv sender for the request, construct a kv sender
+        # construct a kv sender for every request
         req.disagg_kv_sender = kv_sender_class(
             mgr=self.kv_manager,
             bootstrap_addr=f"{req.bootstrap_host}:{self.bootstrap_port}",

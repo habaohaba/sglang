@@ -152,7 +152,7 @@ class DecodePreallocQueue:
             kv_receiver_class = get_kv_class(
                 self.transfer_backend, KVClassType.RECEIVER
             )
-        # construct a kv receiver for decode mode
+        # construct a kv receiver for every request
         kv_receiver = kv_receiver_class(
             mgr=self.kv_manager,
             bootstrap_addr=f"{req.bootstrap_host}:{req.bootstrap_port}", # bootstrap host and port will be set by load balancer
