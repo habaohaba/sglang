@@ -1530,8 +1530,10 @@ class PortArgs:
 
     @staticmethod
     def init_new(server_args, dp_rank: Optional[int] = None) -> "PortArgs":
+        # random port number for nccl initialization
         port = server_args.port + random.randint(100, 1000)
         while True:
+            # make sure the port is available
             if is_port_available(port):
                 break
             if port < 60000:
@@ -1562,6 +1564,7 @@ class PortArgs:
                 len(dist_init_addr) == 2
             ), "please provide --dist-init-addr as host:port of head node"
 
+            # host and port
             dist_init_host, dist_init_port = dist_init_addr
             port_base = int(dist_init_port) + 1
             if dp_rank is None:
@@ -1569,14 +1572,15 @@ class PortArgs:
                     port_base + 3
                 )  # TokenizerManager to DataParallelController
             else:
+                # each dp rank has a different scheduler input port
                 scheduler_input_port = port_base + 3 + 1 + dp_rank
 
             return PortArgs(
-                tokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base}",
+                tokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base}",  # port base for tokenizer, same for all dp ranks
                 scheduler_input_ipc_name=f"tcp://{dist_init_host}:{scheduler_input_port}",
-                detokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base + 1}",
+                detokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base + 1}",  # port base + 1 for detokenizer, same for all dp ranks
                 nccl_port=port,
-                rpc_ipc_name=f"tcp://{dist_init_host}:{port_base + 2}",
+                rpc_ipc_name=f"tcp://{dist_init_host}:{port_base + 2}",  # port base + 2 for rpc, same for all dp ranks
             )
 
 

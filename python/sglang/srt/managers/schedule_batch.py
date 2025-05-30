@@ -627,6 +627,9 @@ class Req:
         tree_cache: Optional[BasePrefixCache] = None,
         enable_hierarchical_cache=False,
     ):
+        """
+        init the input for next round
+        """
         self.fill_ids = self.origin_input_ids + self.output_ids
         if tree_cache is not None:
             # tree cache is None if the prefix is not computed with tree cache.

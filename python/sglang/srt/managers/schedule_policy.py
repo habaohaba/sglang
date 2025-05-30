@@ -284,8 +284,8 @@ class PrefillAdder:
         token_to_kv_pool_allocator: TokenToKVPoolAllocator,
         running_batch: ScheduleBatch,
         new_token_ratio: float,
-        rem_input_tokens: int,
-        rem_chunk_tokens: Optional[int],
+        rem_input_tokens: int, # initialized with max prefill tokens
+        rem_chunk_tokens: Optional[int], # initialized with max chunk tokens
         mixed_with_decode_tokens: int = 0,
     ):
         self.tree_cache = tree_cache
@@ -457,9 +457,13 @@ class PrefillAdder:
     def add_one_req(
         self, req: Req, has_chunked_req: bool, enable_hierarchical_cache: bool = False
     ):
+        """
+        add one request to the waiting queue
+        """
         if req.sampling_params.ignore_eos and getattr(self.tree_cache, "disable", True):
             return self.add_one_req_ignore_eos(req, has_chunked_req)
 
+        # total tokens need to process
         total_tokens = req.extend_input_len + min(
             req.sampling_params.max_new_tokens, CLIP_MAX_NEW_TOKENS_ESTIMATION
         )

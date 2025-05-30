@@ -69,6 +69,7 @@ class DataParallelController:
         # Init inter-process communication
         self.context = zmq.Context(1 + server_args.dp_size)
         if server_args.node_rank == 0:
+            # node rank 0 will have a socket recv_from_tokenizer
             self.recv_from_tokenizer = get_zmq_socket(
                 self.context, zmq.PULL, port_args.scheduler_input_ipc_name, False
             )
@@ -86,14 +87,18 @@ class DataParallelController:
         self.workers = [None] * server_args.dp_size
 
         if server_args.enable_dp_attention:
+            # dp attention scheduelr
             dp_port_args = self.launch_dp_attention_schedulers(server_args, port_args)
             self.control_message_step = server_args.tp_size
         else:
+            # dp scheduler
+            # return all dp port args for each dp rank
             dp_port_args = self.launch_dp_schedulers(server_args, port_args)
             self.control_message_step = 1
 
         # Only node rank 0 runs the real data parallel controller that dispatches the requests.
         if server_args.node_rank == 0:
+            # node rank 0 will socket to send requests to each dp rank scheduler
             for dp_rank in range(server_args.dp_size):
                 self.workers[dp_rank] = get_zmq_socket(
                     self.context,
@@ -112,6 +117,7 @@ class DataParallelController:
         dp_port_args = []
         ready_events = []
         for dp_rank in range(server_args.dp_size):
+            # init port args for each dp rank
             tmp_port_args = PortArgs.init_new(server_args)
             tmp_port_args.tokenizer_ipc_name = port_args.tokenizer_ipc_name
             tmp_port_args.detokenizer_ipc_name = port_args.detokenizer_ipc_name
@@ -125,11 +131,13 @@ class DataParallelController:
             ready_events.append(ready_event)
 
             # Create a thread for each worker
+            # different tp group for different dp rank
             thread = threading.Thread(
                 target=self.launch_tensor_parallel_group_thread,
                 args=(server_args, tmp_port_args, base_gpu_id, dp_rank, ready_event),
             )
             threads.append(thread)
+            # update base gpu id for next thread
             base_gpu_id += server_args.tp_size * server_args.gpu_id_step
 
         # Free all sockets before starting the threads to launch TP workers
@@ -303,6 +311,7 @@ def run_data_parallel_controller_process(
             }
         )
         if server_args.node_rank == 0:
+            # first node will run data parallel controller
             controller.event_loop()
         for proc in controller.scheduler_procs:
             proc.join()

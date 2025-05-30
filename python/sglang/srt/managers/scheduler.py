@@ -346,6 +346,7 @@ class Scheduler(
         self.init_memory_pool_and_cache()
 
         # Init running status
+        # The waiting queue for requests
         self.waiting_queue: List[Req] = []
         # The running decoding batch for continuous batching
         self.running_batch: ScheduleBatch = ScheduleBatch(reqs=[], batch_is_full=False)
@@ -372,6 +373,7 @@ class Scheduler(
         if self.chunked_prefill_size <= 0:  # -1 means disable
             self.chunked_prefill_size = None
         self.chunked_req = None
+        # mixed prefill chunk and decode chunk
         self.is_mixed_chunk = (
             self.chunked_prefill_size is not None and server_args.enable_mixed_chunk
         )
@@ -1362,6 +1364,9 @@ class Scheduler(
         return res
 
     def get_new_batch_prefill(self) -> Optional[ScheduleBatch]:
+        """
+        get a new batch for prefill
+        """
         # Check if the grammar is ready in the grammar queue
         if self.grammar_queue:
             self.move_ready_grammar_requests()
@@ -1396,8 +1401,8 @@ class Scheduler(
             self.token_to_kv_pool_allocator,
             self.running_batch,
             self.new_token_ratio,
-            self.max_prefill_tokens,
-            self.chunked_prefill_size,
+            self.max_prefill_tokens, # remaining tokens for prefill
+            self.chunked_prefill_size, # remaining tokens for chunked prefill
             running_bs if self.is_mixed_chunk else 0,
         )
 
@@ -1410,6 +1415,7 @@ class Scheduler(
 
         # Get requests from the waiting queue to a new prefill batch
         for req in self.waiting_queue:
+            # for each request in waiting queue
             if (
                 self.lora_paths
                 and len(

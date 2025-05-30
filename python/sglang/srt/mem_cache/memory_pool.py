@@ -72,6 +72,7 @@ class ReqToTokenPool:
             self.req_to_token = torch.zeros(
                 (size, max_context_len), dtype=torch.int32, device=device
             )
+        # free slots for request
         self.free_slots = list(range(size))
 
     def write(self, indices, values):
@@ -85,7 +86,7 @@ class ReqToTokenPool:
             return None
 
         select_index = self.free_slots[:need_size]
-        self.free_slots = self.free_slots[need_size:]
+        self.free_slots = self.free_slots[need_size:] # update free slots
 
         return select_index
 
