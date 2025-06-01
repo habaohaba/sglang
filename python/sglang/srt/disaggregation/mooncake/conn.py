@@ -688,14 +688,15 @@ class MooncakeKVSender(BaseKVSender):
         self.kv_mgr.update_status(bootstrap_room, KVPoll.Bootstrapping) # start bootstrapping, handshaking
         self.aux_index = None
         self.bootstrap_server_url = bootstrap_addr
-        self.init_time = time.time()
         self.conclude_state = None # the final state of the request
+        self.init_time = None
         # inner state
         self.curr_idx = 0
 
     def init(self, num_kv_indices: int, aux_index: Optional[int] = None):
         self.num_kv_indices = num_kv_indices
         self.aux_index = aux_index
+        self.init_time = time.time()
 
     def send(
         self,
@@ -728,15 +729,16 @@ class MooncakeKVSender(BaseKVSender):
                 self.conclude_state = status
             elif status == KVPoll.Bootstrapping:
                 # when bootstrapping, check the timeout
-                now = time.time()
-                elapsed = now - self.init_time
-                if elapsed >= self.kv_mgr.bootstrap_time_out:
-                    self.kv_mgr.record_failure(
-                        self.bootstrap_room,
-                        f"Request {self.bootstrap_room} timed out after {elapsed:.1f}s in KVPoll.Bootstrapping",
-                    )
-                    self.conclude_state = KVPoll.Failed
-                    return KVPoll.Failed
+                if self.init_time is not None:
+                    now = time.time()
+                    elapsed = now - self.init_time
+                    if elapsed >= self.kv_mgr.bootstrap_time_out:
+                        self.kv_mgr.record_failure(
+                            self.bootstrap_room,
+                            f"Request {self.bootstrap_room} timed out after {elapsed:.1f}s in KVPoll.Bootstrapping",
+                        )
+                        self.conclude_state = KVPoll.Failed
+                        return KVPoll.Failed
 
             return status
         else:
