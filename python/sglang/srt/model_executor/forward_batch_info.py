@@ -75,6 +75,9 @@ class ForwardMode(IntEnum):
         return self.is_extend()
 
     def is_extend(self):
+        """
+        same as is_prefill
+        """
         return (
             self == ForwardMode.EXTEND
             or self == ForwardMode.MIXED

@@ -453,7 +453,11 @@ class SchedulerDisaggregationPrefillMixin:
         self.disagg_prefill_inflight_queue = undone_reqs
 
     def process_prefill_chunk(self: Scheduler) -> None:
+        """
+        process the chunked prefill request
+        """
         if self.last_batch and self.last_batch.forward_mode.is_extend():
+            # if the previous batch is extend, we need to process the chunked prefill request
             if self.chunked_req:
                 # Move the chunked request out of the batch so that we can merge
                 # only finished requests to running_batch.

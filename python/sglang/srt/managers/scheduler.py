@@ -354,7 +354,7 @@ class Scheduler(
         self.running_batch: ScheduleBatch = ScheduleBatch(reqs=[], batch_is_full=False)
         # The current forward batch
         self.cur_batch: Optional[ScheduleBatch] = None
-        # The last forward batch
+        # The last forward batch, previous
         self.last_batch: Optional[ScheduleBatch] = None
         self.forward_ct = 0
         self.forward_ct_decode = 0
@@ -1486,6 +1486,7 @@ class Scheduler(
             self.tree_cache.ready_to_load_cache()
 
         if adder.new_chunked_req is not None:
+            # set the chunked request to the new chunked request from the adder
             assert self.chunked_req is None
             self.chunked_req = adder.new_chunked_req
 

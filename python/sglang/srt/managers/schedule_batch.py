@@ -1522,11 +1522,15 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         chunked_req_to_exclude: Optional[Union[Req, List[Req]]] = None,
         keep_indices: Optional[List[int]] = None,
     ):
+        """
+        filter the batch, keep the requests that are not finished and not in the chunked_req_to_exclude
+        """
         if keep_indices is None:
             if isinstance(chunked_req_to_exclude, Req):
                 chunked_req_to_exclude = [chunked_req_to_exclude]
             elif chunked_req_to_exclude is None:
                 chunked_req_to_exclude = []
+            # construct request to keep
             keep_indices = [
                 i
                 for i in range(len(self.reqs))
@@ -1535,6 +1539,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
             ]
 
         if keep_indices is None or len(keep_indices) == 0:
+            # no requests to keep
             # Filter out all requests
             self.reqs = []
             return
