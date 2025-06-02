@@ -504,7 +504,7 @@ class Req:
         # Prefix info
         # The indices to kv cache for the shared prefix.
         self.prefix_indices = []
-        # Number of tokens to run prefill.
+        # Number of tokens to run prefill, have already subtracted the prefix cache
         self.extend_input_len = 0
         # The relative logprob_start_len in an extend batch
         self.extend_logprob_start_len = 0
@@ -629,6 +629,7 @@ class Req:
     ):
         """
         init the input for next round
+        update the fill_ids and extend_input_len
         """
         self.fill_ids = self.origin_input_ids + self.output_ids
         if tree_cache is not None:

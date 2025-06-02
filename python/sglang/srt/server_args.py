@@ -224,6 +224,9 @@ class ServerArgs:
     pdlb_url: Optional[str] = None
 
     def __post_init__(self):
+        """
+        Post-init for ServerArgs
+        """
         # Expert parallelism
         if self.enable_ep_moe:
             self.ep_size = self.tp_size
@@ -281,7 +284,7 @@ class ServerArgs:
 
         # Set chunked prefill size, which depends on the gpu memory capacity
         if self.chunked_prefill_size is None:
-            if gpu_mem is not None and gpu_mem > 180_000:
+            if gpu_mem is not None and gpu_mem > 180_000: # improve readability using _
                 self.chunked_prefill_size = 16384
             elif gpu_mem is not None and gpu_mem < 25_000:
                 self.chunked_prefill_size = 2048

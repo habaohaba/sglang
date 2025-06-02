@@ -492,6 +492,17 @@ class GroupCoordinator:
         dim: int = -1,
         tensor_list: List[torch.Tensor] = None,
     ) -> torch.Tensor:
+        """
+        all_gather the input tensor
+
+        Args:
+            input_: the input tensor
+            dim: the dimension to allgather
+            tensor_list: the list of tensors to allgather
+
+        Returns:
+            the allgathered tensor
+        """
         world_size = self.world_size
         # Bypass the function if we are using only 1 GPU.
         if world_size == 1:
@@ -524,6 +535,7 @@ class GroupCoordinator:
         # NOTE: we have to use concat-style all-gather here,
         # stack-style all-gather has compatibility issues with
         # torch.compile . see https://github.com/pytorch/pytorch/issues/138795
+        # create a new tuple for the output size
         output_size = (input_size[0] * world_size,) + input_size[1:]
         # Allocate output tensor.
         output_tensor = torch.empty(
@@ -533,6 +545,7 @@ class GroupCoordinator:
         self.all_gather_into_tensor(output_tensor, input_)
         # Reshape
         output_tensor = output_tensor.reshape((world_size,) + input_size)
+        # move dimension 0 to the specified dimension
         output_tensor = output_tensor.movedim(0, dim)
         output_tensor = output_tensor.reshape(
             input_size[:dim] + (world_size * input_size[dim],) + input_size[dim + 1 :]
@@ -681,6 +694,7 @@ class GroupCoordinator:
             device="cpu",
         )
 
+        # recv the object from the source rank
         rank_object = torch.distributed.recv(
             object_tensor, src=self.ranks[src], group=self.cpu_group
         )
@@ -835,6 +849,7 @@ class GroupCoordinator:
     ) -> Optional[Dict[str, Union[torch.Tensor, Any]]]:
         """Recv the input tensor dictionary.
         NOTE: `src` is the local rank of the source rank.
+        all_gather_group: the group to do allgather for the tensor dictionary
         """
         # Bypass the function if we are using only 1 GPU.
         if not torch.distributed.is_initialized() or self.world_size == 1:
@@ -849,6 +864,7 @@ class GroupCoordinator:
         metadata_group = self.cpu_group
 
         if src is None:
+            # recv from the previous rank if src is not provided
             src = (self.rank_in_group - 1) % self.world_size
         assert src < self.world_size, f"Invalid src rank ({src})"
 
@@ -856,6 +872,7 @@ class GroupCoordinator:
         tensor_dict: Dict[str, Any] = {}
         for key, value in recv_metadata_list:
             if isinstance(value, TensorMetadata):
+                # value is TensorMetadata
                 tensor = torch.empty(value.size, dtype=value.dtype, device=value.device)
                 if tensor.numel() == 0:
                     # Skip broadcasting empty tensors.
@@ -989,7 +1006,7 @@ def init_model_parallel_group(
         group_name=group_name,
     )
 
-
+# tensor model parallel group list of ranks
 _TP: Optional[GroupCoordinator] = None
 
 
@@ -1001,6 +1018,7 @@ def get_tp_group() -> GroupCoordinator:
 # kept for backward compatibility
 get_tensor_model_parallel_group = get_tp_group
 
+# pipeline model parallel group list of ranks
 _PP: Optional[GroupCoordinator] = None
 
 
@@ -1144,6 +1162,7 @@ def initialize_model_parallel(
     assert _TP is None, "tensor model parallel group is already initialized"
     group_ranks = []
     for i in range(num_tensor_model_parallel_groups):
+        # each ranks have tensor_model_parallel_size ranks
         ranks = list(
             range(i * tensor_model_parallel_size, (i + 1) * tensor_model_parallel_size)
         )
@@ -1166,6 +1185,8 @@ def initialize_model_parallel(
     assert _PP is None, "pipeline model parallel group is already initialized"
     group_ranks = []
     for i in range(num_pipeline_model_parallel_groups):
+        # each ranks have pipeline_model_parallel_size ranks
+        # start from i, step by num_pipeline_model_parallel_groups
         ranks = list(range(i, world_size, num_pipeline_model_parallel_groups))
         group_ranks.append(ranks)
     # pipeline parallel does not need custom allreduce

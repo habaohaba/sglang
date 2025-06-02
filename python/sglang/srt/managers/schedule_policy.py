@@ -286,7 +286,7 @@ class PrefillAdder:
         new_token_ratio: float,
         rem_input_tokens: int, # initialized with max prefill tokens
         rem_chunk_tokens: Optional[int], # initialized with max chunk tokens
-        mixed_with_decode_tokens: int = 0,
+        mixed_with_decode_tokens: int = 0, # initialized with running_batch reqs if is_mixed_chunk
     ):
         self.tree_cache = tree_cache
         self.token_to_kv_pool_allocator = token_to_kv_pool_allocator
@@ -335,6 +335,10 @@ class PrefillAdder:
         )
 
     def budget_state(self):
+        """
+        check if the prefill adder has enough budget to add one request
+        return the result of the budget state
+        """
         if self.rem_total_tokens <= 0 or self.cur_rem_tokens <= 0:
             return AddReqResult.NO_TOKEN
 
@@ -348,6 +352,12 @@ class PrefillAdder:
     def _prefill_one_req(
         self, prefix_len: int, extend_input_len: int, max_new_tokens: int
     ):
+        """
+        update metadata of the prefill adder after prefill one request
+        prefix_len: the length of the prefix
+        extend_input_len: the length of the input
+        max_new_tokens: the maximum number of new tokens
+        """
         self.rem_total_token_offset += extend_input_len + max_new_tokens
         self.cur_rem_token_offset += extend_input_len
         self.rem_input_tokens -= extend_input_len
@@ -358,9 +368,17 @@ class PrefillAdder:
         self.log_input_tokens += extend_input_len
 
     def add_chunked_req(self, req: Req):
+        """
+        add the chunked request to the can_run_list
+        if the chunked request is not truncated, return None
+        """
+        # if chunk req prefill len is larger then remaining chunk tokens, need to truncate
+        # if not truncated, return None
         truncated = req.extend_input_len > self.rem_chunk_tokens
+        # update the extend_input_len and fill_ids
         req.extend_input_len = min(req.extend_input_len, self.rem_chunk_tokens)
         req.fill_ids = req.fill_ids[: len(req.prefix_indices) + req.extend_input_len]
+        # add the req to the can_run_list
         self.can_run_list.append(req)
         self._prefill_one_req(
             0,
@@ -458,7 +476,9 @@ class PrefillAdder:
         self, req: Req, has_chunked_req: bool, enable_hierarchical_cache: bool = False
     ):
         """
-        add one request to the waiting queue
+        add one request to the can_run_list
+
+        return the result of the budget state
         """
         if req.sampling_params.ignore_eos and getattr(self.tree_cache, "disable", True):
             return self.add_one_req_ignore_eos(req, has_chunked_req)

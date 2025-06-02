@@ -238,6 +238,7 @@ class SchedulerDisaggregationPrefillMixin:
             self.cur_batch = batch
 
             if batch:
+                # run the batch
                 result = self.run_batch(batch)
                 self.process_batch_result_disagg_prefill(batch, result)
 

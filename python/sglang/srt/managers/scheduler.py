@@ -1416,7 +1416,9 @@ class Scheduler(
         )
 
         if self.chunked_req is not None:
+            # if chunked_req is not None, it means that the chunked prefill is not finished
             self.chunked_req.init_next_round_input()
+            # if not truncated, return None
             self.chunked_req = adder.add_chunked_req(self.chunked_req)
 
         if self.lora_paths:
@@ -1509,6 +1511,7 @@ class Scheduler(
             self.server_args.enable_custom_logit_processor,
             chunked_req=self.chunked_req,
         )
+        # for prefill, prepare the batch for extend
         new_batch.prepare_for_extend()
 
         # Mixed-style chunked prefill
@@ -1585,6 +1588,7 @@ class Scheduler(
             if self.spec_algorithm.is_none():
                 model_worker_batch = batch.get_model_worker_batch()
                 if self.pp_group.is_last_rank:
+                    # last rank of the pipeline model parallel group
                     logits_output, next_token_ids, can_run_cuda_graph = (
                         self.tp_worker.forward_batch_generation(model_worker_batch)
                     )

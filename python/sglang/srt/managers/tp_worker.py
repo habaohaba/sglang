@@ -188,10 +188,16 @@ class TpModelWorker:
     ) -> Tuple[
         Union[LogitsProcessorOutput, torch.Tensor], Optional[torch.Tensor], bool
     ]:
+        """
+        This function is called to forward a batch of generation requests.
+        """
+        # create a new forward batch
         forward_batch = ForwardBatch.init_new(model_worker_batch, self.model_runner)
 
+        # recv the proxy tensors from the previous rank
         pp_proxy_tensors = None
         if not self.pp_group.is_first_rank:
+            # not first rank of the pipeline model parallel group
             pp_proxy_tensors = PPProxyTensors(
                 self.pp_group.recv_tensor_dict(
                     all_gather_group=self.get_attention_tp_group()
@@ -199,6 +205,7 @@ class TpModelWorker:
             )
 
         if self.pp_group.is_last_rank:
+            # last rank of the pipeline model parallel group
             logits_output, can_run_cuda_graph = self.model_runner.forward(
                 forward_batch, pp_proxy_tensors=pp_proxy_tensors
             )
@@ -214,6 +221,7 @@ class TpModelWorker:
 
             return logits_output, next_token_ids, can_run_cuda_graph
         else:
+            # middle rank of the pipeline model parallel group
             pp_proxy_tensors, can_run_cuda_graph = self.model_runner.forward(
                 forward_batch,
                 pp_proxy_tensors=pp_proxy_tensors,

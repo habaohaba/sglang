@@ -206,6 +206,9 @@ class TpModelWorkerClient:
     def forward_batch_generation(
         self, model_worker_batch: ModelWorkerBatch
     ) -> Tuple[None, torch.Tensor, bool]:
+        """
+        This function is called to forward a batch of generation requests.
+        """
         # Create a new copy of sampling_info because it will be updated in-place by the scheduler for the next batch.
         sampling_info = model_worker_batch.sampling_info
         sampling_info.update_penalties()
