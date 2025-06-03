@@ -349,6 +349,7 @@ class SchedulerDisaggregationPrefillMixin:
         for i, (req, next_token_id) in enumerate(
             zip(batch.reqs, next_token_ids, strict=True)
         ):
+            # for each request in the batch
             req: Req
             if req.is_chunked <= 0:
                 # There is no output_ids for prefill
@@ -498,6 +499,7 @@ class SchedulerDisaggregationPrefillMixin:
             end_idx = end_idx - end_idx % page_size
 
         kv_indices = (
+            # start idx and end idx are in the range of [0, max_context_len)
             self.req_to_token_pool.req_to_token[req.req_pool_idx, start_idx:end_idx]
             .cpu()
             .numpy()

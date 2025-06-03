@@ -289,7 +289,7 @@ class MetadataBuffers:
 class FastQueue:
     def __init__(self):
         self._buf = deque()
-        self._cond = threading.Condition()
+        self._cond = threading.Condition() # condition variable for the queue
 
     def put(self, item):
         with self._cond:

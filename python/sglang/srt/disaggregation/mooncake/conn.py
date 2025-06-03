@@ -79,6 +79,9 @@ class TransferInfo:
 
     @classmethod
     def from_zmq(cls, msg: List[bytes]):
+        """
+        parse the zmq message to construct a TransferInfo object
+        """
         if msg[4] == b"" and msg[5] == b"":
             is_dummy = True
             dst_kv_indices = np.array([], dtype=np.int64)
@@ -168,6 +171,7 @@ class MooncakeKVManager(BaseKVManager):
                 min(max(4, int(0.75 * cpu_count) // 8), 12),
             )
             transfer_queue_size = get_int_env_var("SGLANG_DISAGGREGATION_QUEUE_SIZE", 4)
+            # list of transfer queues
             self.transfer_queues: List[FastQueue] = [
                 FastQueue() for _ in range(transfer_queue_size)
             ]
@@ -329,7 +333,7 @@ class MooncakeKVManager(BaseKVManager):
         """
         while True:
             try:
-                kv_chunk: TransferKVChunk = queue.get()
+                kv_chunk: TransferKVChunk = queue.get() # maybe get blocked
                 reqs_to_be_processed = (
                     self.transfer_infos[kv_chunk.room].values()
                     if kv_chunk.room in self.transfer_infos
@@ -482,6 +486,7 @@ class MooncakeKVManager(BaseKVManager):
     def start_decode_thread(self):
         # new port for decode thread
         self.rank_port = get_free_port()
+        # server socket for decode thread
         self.server_socket.bind(f"tcp://{get_local_ip_by_remote()}:{self.rank_port}")
 
         def decode_thread():
@@ -578,6 +583,7 @@ class MooncakeKVManager(BaseKVManager):
         session_port_sum = sum(int(session.split(":")[1]) for session in dst_infos)
         shard_idx = session_port_sum % len(self.transfer_queues)
 
+        # put kv transfer in the transfer queue
         self.transfer_queues[shard_idx].put(
             TransferKVChunk(
                 room=bootstrap_room,
@@ -702,6 +708,9 @@ class MooncakeKVSender(BaseKVSender):
         self,
         kv_indices: npt.NDArray[np.int64],
     ):
+        """
+        send the kv indices to the decoder server
+        """
         index_slice = slice(self.curr_idx, self.curr_idx + len(kv_indices))
         self.curr_idx += len(kv_indices)
         is_last = self.curr_idx == self.num_kv_indices
@@ -891,7 +900,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
                     return
 
             self.bootstrap_infos = bootstrap_infos
-            # add new bootstrap info to connection pool
+            # add new bootstrap info to connection pool, when new kv receiver is created, it will fetch the bootstrap info from the bootstrap server
             self.kv_mgr.connection_pool[bootstrap_key] = self.bootstrap_infos
 
             # Register kv_args only once to prefill KVManager according to the info fetched from the bootstrap server
