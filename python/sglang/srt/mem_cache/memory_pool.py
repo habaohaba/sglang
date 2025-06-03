@@ -228,6 +228,9 @@ class TokenToKVPoolAllocator:
         self.free_slots = free_slots
 
     def clear(self):
+        """
+        reset the free slots to the default value
+        """
         # The padded slot 0 is used for writing dummy outputs from padded tokens.
         self.free_slots = torch.arange(
             1, self.size + 1, dtype=torch.int64, device=self.device
@@ -541,6 +544,7 @@ class MLATokenToKVPool(KVCache):
             # The padded slot 0 is used for writing dummy outputs from padded tokens.
             self.kv_buffer = [
                 torch.zeros(
+                    # only one head for MLA cache
                     (size + page_size, 1, kv_lora_rank + qk_rope_head_dim),
                     dtype=self.store_dtype,
                     device=device,

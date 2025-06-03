@@ -931,6 +931,7 @@ class ModelRunner:
             # Draft worker shares req_to_token_pool with the target worker.
             assert self.is_draft_worker
 
+        # initialize token to kv pool (kv cache pool)
         if self.use_mla_backend:
             self.token_to_kv_pool = MLATokenToKVPool(
                 self.max_total_num_tokens,
@@ -977,6 +978,7 @@ class ModelRunner:
             )
 
         if self.token_to_kv_pool_allocator is None:
+            # if token to kv pool allocator is not provided, create a new one
             if self.page_size == 1:
                 self.token_to_kv_pool_allocator = TokenToKVPoolAllocator(
                     self.max_total_num_tokens,

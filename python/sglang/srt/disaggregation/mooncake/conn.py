@@ -58,7 +58,7 @@ class KVTransferError(Exception):
 # prefill
 @dataclasses.dataclass
 class TransferKVChunk:
-    room: int
+    room: int # bootstrap room
     prefill_kv_indices: npt.NDArray[np.int64]
     index_slice: slice
     is_last: bool
@@ -265,6 +265,9 @@ class MooncakeKVManager(BaseKVManager):
 
         # Worker function for processing a single layer
         def process_layer(src_ptr: int, dst_ptr: int, item_len: int) -> int:
+            """
+            transfer the kvcache from prefill to decode for the same layer
+            """
             for prefill_index, decode_index in zip(prefill_kv_blocks, dst_kv_blocks):
                 src_addr = src_ptr + int(prefill_index[0]) * item_len
                 dst_addr = dst_ptr + int(decode_index[0]) * item_len
@@ -284,6 +287,7 @@ class MooncakeKVManager(BaseKVManager):
                 dst_ptr,
                 item_len,
             )
+            # submit the transfer task for each layer
             for (src_ptr, dst_ptr, item_len) in layers_params
         ]
 
@@ -451,11 +455,13 @@ class MooncakeKVManager(BaseKVManager):
         def bootstrap_thread():
             """This thread recvs pre-alloc notification from the decode engine"""
             # KVPoll.Bootstrapping -> KVPoll.WaitingForInput
+            # the decode server have already finish handshake
             while True:
                 waiting_req_bytes = self.server_socket.recv_multipart()
                 room = waiting_req_bytes[0].decode("ascii")
                 mooncake_session_id = waiting_req_bytes[3].decode("ascii")
                 if room == "None":
+                    # add decode server info to table
                     self.decode_kv_args_table[mooncake_session_id] = (
                         KVArgsRegisterInfo.from_zmq(waiting_req_bytes)
                     )
@@ -790,6 +796,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         self.session_id = self.kv_mgr.get_session_id()
         self.kv_mgr.update_status(self.bootstrap_room, KVPoll.Bootstrapping)
         self.conclude_state = None
+        self.target_tp_rank= None
 
         if self.bootstrap_addr not in self.kv_mgr.prefill_dp_size_table:
             # new bootstrap addr, fetch prefill parallel info from bootstrap server
@@ -874,7 +881,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         )
 
         if bootstrap_key not in self.kv_mgr.connection_pool:
-            # new bootstrap key, fetch bootstrap info from bootstrap server
+            # new bootstrap key, fetch bootstrap info from bootstrap server and add to connection pool
             bootstrap_infos = []
             for target_tp_rank in self.target_tp_ranks:
                 bootstrap_info = self._get_bootstrap_info_from_server(
@@ -914,6 +921,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         self.kv_mgr.addr_to_rooms_tracker[self.bootstrap_addr].append(
             self.bootstrap_room
         )
+        # handshake finished, update the req status to waiting for input
         self.kv_mgr.update_status(self.bootstrap_room, KVPoll.WaitingForInput)
 
     def _get_bootstrap_info_from_server(self, engine_rank, target_dp_group):
@@ -967,11 +975,12 @@ class MooncakeKVReceiver(BaseKVReceiver):
 
             sock, lock = self._connect("tcp://" + self.prefill_server_url)
             with lock:
+                # send info to prefill server to register decoder server to prefill server
                 sock.send_multipart(
                     [
                         "None".encode("ascii"),
-                        get_local_ip_by_remote().encode("ascii"),
-                        str(self.kv_mgr.rank_port).encode("ascii"),
+                        get_local_ip_by_remote().encode("ascii"), # decode server ip
+                        str(self.kv_mgr.rank_port).encode("ascii"),  # decode server rank port
                         self.session_id.encode("ascii"),
                         packed_kv_data_ptrs,
                         packed_aux_data_ptrs,

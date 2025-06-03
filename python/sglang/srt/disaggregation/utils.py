@@ -310,6 +310,7 @@ def group_concurrent_contiguous(
     src_indices: npt.NDArray[np.int64], dst_indices: npt.NDArray[np.int64]
 ) -> Tuple[List[npt.NDArray[np.int64]], List[npt.NDArray[np.int64]]]:
     """Vectorised NumPy implementation."""
+    # group contiguous src and dst indices
     if src_indices.size == 0:
         return [], []
 
