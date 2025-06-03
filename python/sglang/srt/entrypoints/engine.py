@@ -555,6 +555,7 @@ def _launch_subprocesses(
         server_args.model_path, server_args.tokenizer_path
     )
 
+    # all the scheduler processes
     scheduler_procs = []
     if server_args.dp_size == 1:
         # data parallel size is 1, so only launch tensor parallel scheduler processes

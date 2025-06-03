@@ -170,6 +170,7 @@ class DecodePreallocQueue:
             return
 
         if all(decode_req.waiting_for_input for decode_req in self.queue):
+            # all req is waiting for input, no need to poll
             return
 
         polls = poll_and_all_reduce(

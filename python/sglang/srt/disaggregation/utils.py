@@ -33,7 +33,7 @@ class DisaggregationMode(Enum):
 
 def poll_and_all_reduce(pollers, gloo_group):
     """
-    poll the status of the pollers and all reduce the results
+    poll the status of the pollers and all reduce take the min of poll results
     """
     # at a certain prob, the poll is failed to simulate failure
     if FAILURE_PROB > 0:
@@ -44,6 +44,7 @@ def poll_and_all_reduce(pollers, gloo_group):
             for poller in pollers
         ]
     else:
+        # all the poller results
         polls = [int(poller.poll()) for poller in pollers]
     tensor_to_reduce = torch.tensor(polls, dtype=torch.uint8, device="cpu")
     # use min to make sure all cpu in the group have finished

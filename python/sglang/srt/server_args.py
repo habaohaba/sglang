@@ -1601,7 +1601,7 @@ class PortArgs:
 
             return PortArgs(
                 tokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base}",  # port base for tokenizer, same for all dp ranks
-                scheduler_input_ipc_name=f"tcp://{dist_init_host}:{scheduler_input_port}",
+                scheduler_input_ipc_name=f"tcp://{dist_init_host}:{scheduler_input_port}",  # each dp rank has a different scheduler input port
                 detokenizer_ipc_name=f"tcp://{dist_init_host}:{port_base + 1}",  # port base + 1 for detokenizer, same for all dp ranks
                 nccl_port=port,
                 rpc_ipc_name=f"tcp://{dist_init_host}:{port_base + 2}",  # port base + 2 for rpc, same for all dp ranks
