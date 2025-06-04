@@ -235,6 +235,9 @@ class ModelRunner:
         )
 
     def initialize(self, min_per_gpu_memory: float):
+        """
+        Initialize the model runner.
+        """
         server_args = self.server_args
         self.memory_saver_adapter = TorchMemorySaverAdapter.create(
             enable=self.server_args.enable_memory_saver
@@ -431,6 +434,7 @@ class ModelRunner:
 
     def init_torch_distributed(self):
         """
+        configure torch distributed environment and set global dist variables
         return min_per_gpu_memory
         """
         logger.info("Init torch distributed begin.")

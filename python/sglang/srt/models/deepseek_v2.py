@@ -590,6 +590,7 @@ class DeepseekV2AttentionMLA(nn.Module):
 
         # For tensor parallel attention
         if self.q_lora_rank is not None:
+            # do q down projection
             self.fused_qkv_a_proj_with_mqa = ReplicatedLinear(
                 self.hidden_size,
                 self.q_lora_rank + self.kv_lora_rank + self.qk_rope_head_dim,
@@ -598,6 +599,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 prefix=add_prefix("fused_qkv_a_proj_with_mqa", prefix),
             )
             self.q_a_layernorm = RMSNorm(self.q_lora_rank, eps=config.rms_norm_eps)
+            # q up projection
             self.q_b_proj = ColumnParallelLinear(
                 q_lora_rank,
                 self.num_heads * self.qk_head_dim,
@@ -608,6 +610,8 @@ class DeepseekV2AttentionMLA(nn.Module):
                 tp_size=attn_tp_size,
             )
         else:
+            # do not use q down projection
+            # first part of tensor parallelism, split column
             self.q_proj = ColumnParallelLinear(
                 self.hidden_size,
                 self.num_heads * self.qk_head_dim,
@@ -617,6 +621,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 tp_rank=attn_tp_rank,
                 tp_size=attn_tp_size,
             )
+            # kv down projection
             self.kv_a_proj_with_mqa = ReplicatedLinear(
                 self.hidden_size,
                 self.kv_lora_rank + self.qk_rope_head_dim,
@@ -625,6 +630,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 prefix=add_prefix("kv_a_proj_with_mqa", prefix),
             )
 
+        # kv up projection, first part of tensor parallelism, split column
         self.kv_b_proj = ColumnParallelLinear(
             self.kv_lora_rank,
             self.num_heads * (self.qk_nope_head_dim + self.v_head_dim),
@@ -671,7 +677,7 @@ class DeepseekV2AttentionMLA(nn.Module):
             self.num_local_heads,
             self.kv_lora_rank + self.qk_rope_head_dim,
             self.scaling,
-            num_kv_heads=1,
+            num_kv_heads=1, # only one kv head
             layer_id=layer_id,
             v_head_dim=self.kv_lora_rank,
             quant_config=quant_config,
@@ -691,8 +697,8 @@ class DeepseekV2AttentionMLA(nn.Module):
 
         self.alt_stream = alt_stream
 
-        self.w_kc = None
-        self.w_vc = None
+        self.w_kc = None # up projection weight for k
+        self.w_vc = None # up projection weight for v
         self.w_scale = 1.0
 
         self.w_scale_k = None
@@ -718,6 +724,13 @@ class DeepseekV2AttentionMLA(nn.Module):
     def dispatch_attn_forward_method(
         self, forward_batch: ForwardBatch
     ) -> AttnForwardMethod:
+        """
+        Dispatch the attention forward method.
+        MLA: Multi-Latent Attention
+        MHA: Multi-Head Attention
+        MHA_CHUNKED_KV: Multi-Head Attention with chunked KV cache
+        MLA_FUSED_ROPE: Multi-Latent Attention with fused RoPE
+        """
         def _dispatch_mla_subtype():
             if _is_hip:
                 if (
@@ -846,6 +859,7 @@ class DeepseekV2AttentionMLA(nn.Module):
         elif attn_forward_method == AttnForwardMethod.MHA_CHUNKED_KV:
             return self.forward_normal_chunked_kv_core(*inner_state)
         elif attn_forward_method == AttnForwardMethod.MLA:
+            # MLA: Multi-Latent Attention use absorb version
             return self.forward_absorb_core(*inner_state)
         elif attn_forward_method == AttnForwardMethod.MLA_FUSED_ROPE:
             return self.forward_absorb_fused_mla_rope_core(*inner_state)
@@ -912,9 +926,13 @@ class DeepseekV2AttentionMLA(nn.Module):
         from sglang.srt.model_executor.cuda_graph_runner import get_is_capture_mode
 
         if self.q_lora_rank is not None:
+            # do down projection
+            # first one of forward tuple is output
+            # split output into q and latent cache
             q, latent_cache = self.fused_qkv_a_proj_with_mqa(hidden_states)[0].split(
                 [self.q_lora_rank, self.kv_lora_rank + self.qk_rope_head_dim], dim=-1
             )
+            # latent cache contain k_nope and k_pe
             k_nope = latent_cache[..., : self.kv_lora_rank]
 
             # overlap qk norm
@@ -932,6 +950,7 @@ class DeepseekV2AttentionMLA(nn.Module):
             k_nope = k_nope.unsqueeze(1)
             q = self.q_b_proj(q)[0].view(-1, self.num_local_heads, self.qk_head_dim)
         else:
+            # not do q down projection
             q = self.q_proj(hidden_states)[0].view(
                 -1, self.num_local_heads, self.qk_head_dim
             )
@@ -972,6 +991,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 q_nope_val, self.w_kc, q_nope_scale, self.w_scale, torch.bfloat16
             )
         else:
+            # absorb version of MLA, use bmm to compute q_nope_out
             q_nope_out = torch.bmm(q_nope.transpose(0, 1), self.w_kc)
 
         q_nope_out = q_nope_out.transpose(0, 1)
@@ -982,6 +1002,9 @@ class DeepseekV2AttentionMLA(nn.Module):
     def forward_absorb_core(
         self, q_pe, k_pe, q_nope_out, k_nope, forward_batch, zero_allocator
     ):
+        """
+        multi-latent attention core.
+        """
         if self.attention_backend == "fa3" or self.attention_backend == "flashinfer":
             attn_output = self.attn_mqa(
                 q_nope_out, k_nope, k_nope, forward_batch, q_rope=q_pe, k_rope=k_pe
@@ -1768,7 +1791,7 @@ class DeepseekV2ForCausalLM(nn.Module):
                         0,
                     ).T
             else:
-                w = self_attn.kv_b_proj.weight
+                w = self_attn.kv_b_proj.weight # up projection weight
             # NOTE(HandH1998): Since `bmm_fp8` only supports per-tensor scale, we have to requantize `self_attn.kv_b_proj`.
             # This may affect the accuracy of fp8 model.
             # Fix deepseek v3 blockwise bmm by using deep_gemm
@@ -1848,7 +1871,7 @@ class DeepseekV2ForCausalLM(nn.Module):
                     w = w.to(torch.bfloat16) * self_attn.kv_b_proj.weight_scale.to(
                         torch.bfloat16
                     )
-
+            # split up projection weight into w_kc and w_vc
             w_kc, w_vc = w.unflatten(
                 0, (-1, self_attn.qk_nope_head_dim + self_attn.v_head_dim)
             ).split([self_attn.qk_nope_head_dim, self_attn.v_head_dim], dim=1)
@@ -2156,5 +2179,5 @@ class DeepseekV2ForCausalLM(nn.Module):
 class DeepseekV3ForCausalLM(DeepseekV2ForCausalLM):
     pass
 
-
+# class to register to model registry
 EntryClass = [DeepseekV2ForCausalLM, DeepseekV3ForCausalLM]

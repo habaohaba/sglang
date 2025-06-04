@@ -65,6 +65,7 @@ class TpModelWorker:
         self.pp_rank = pp_rank
 
         # Init model and tokenizer
+        # get model config from huggingface
         self.model_config = ModelConfig.from_server_args(
             server_args,
             model_path=(
@@ -75,6 +76,7 @@ class TpModelWorker:
             is_draft_model=is_draft_worker,
         )
 
+        # init model runner
         self.model_runner = ModelRunner(
             model_config=self.model_config,
             mem_fraction_static=server_args.mem_fraction_static,
