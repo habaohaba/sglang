@@ -554,7 +554,7 @@ class DeepseekV2AttentionMLA(nn.Module):
         self,
         config: PretrainedConfig,
         hidden_size: int,
-        num_heads: int,
+        num_heads: int, # 128
         qk_nope_head_dim: int,
         qk_rope_head_dim: int,
         v_head_dim: int,
@@ -590,7 +590,7 @@ class DeepseekV2AttentionMLA(nn.Module):
 
         # For tensor parallel attention
         if self.q_lora_rank is not None:
-            # do q down projection
+            # q k v down projection
             self.fused_qkv_a_proj_with_mqa = ReplicatedLinear(
                 self.hidden_size,
                 self.q_lora_rank + self.kv_lora_rank + self.qk_rope_head_dim,
@@ -621,7 +621,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 tp_rank=attn_tp_rank,
                 tp_size=attn_tp_size,
             )
-            # kv down projection
+            # kv down projection, replicated for each rank
             self.kv_a_proj_with_mqa = ReplicatedLinear(
                 self.hidden_size,
                 self.kv_lora_rank + self.qk_rope_head_dim,
@@ -673,17 +673,21 @@ class DeepseekV2AttentionMLA(nn.Module):
         else:
             self.rotary_emb.forward = self.rotary_emb.forward_native
 
+        # absorb version for mla
+        # will save kv cache in token_to_kv_pool using attention backend implementation
         self.attn_mqa = RadixAttention(
             self.num_local_heads,
             self.kv_lora_rank + self.qk_rope_head_dim,
             self.scaling,
             num_kv_heads=1, # only one kv head
             layer_id=layer_id,
-            v_head_dim=self.kv_lora_rank,
+            v_head_dim=self.kv_lora_rank, # absorb version latent dimension is kv_lora_rank
             quant_config=quant_config,
             prefix=add_prefix("attn_mqa", prefix),
         )
 
+        # no absorb version for mha
+        # will save kv cache in token_to_kv_pool manually
         self.attn_mha = RadixAttention(
             self.num_local_heads,
             self.qk_nope_head_dim + self.qk_rope_head_dim,
@@ -697,7 +701,7 @@ class DeepseekV2AttentionMLA(nn.Module):
 
         self.alt_stream = alt_stream
 
-        self.w_kc = None # up projection weight for k
+        self.w_kc = None # up projection weight for k, will be set in post load weights
         self.w_vc = None # up projection weight for v
         self.w_scale = 1.0
 
@@ -741,6 +745,7 @@ class DeepseekV2AttentionMLA(nn.Module):
                 else:
                     return AttnForwardMethod.MLA
             else:
+                # most go to this branch
                 return AttnForwardMethod.MLA
 
         if self.attention_backend == "flashinfer":
@@ -889,6 +894,7 @@ class DeepseekV2AttentionMLA(nn.Module):
         kv_a, _ = latent_cache.split([self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
         latent_cache = latent_cache.unsqueeze(1)
         kv_a = self.kv_a_layernorm(kv_a.contiguous())
+        # kv up projection
         kv = self.kv_b_proj(kv_a)[0]
         kv = kv.view(-1, self.num_local_heads, self.qk_nope_head_dim + self.v_head_dim)
         k_nope = kv[..., : self.qk_nope_head_dim]
@@ -911,6 +917,7 @@ class DeepseekV2AttentionMLA(nn.Module):
         return q, k, v, forward_batch
 
     def forward_normal_core(self, q, k, v, forward_batch):
+        # q k v already have multi heads
         attn_output = self.attn_mha(q, k, v, forward_batch, save_kv_cache=False)
         attn_output = attn_output.reshape(-1, self.num_local_heads * self.v_head_dim)
         output, _ = self.o_proj(attn_output)
@@ -1006,6 +1013,7 @@ class DeepseekV2AttentionMLA(nn.Module):
         multi-latent attention core.
         """
         if self.attention_backend == "fa3" or self.attention_backend == "flashinfer":
+            # q, k, v
             attn_output = self.attn_mqa(
                 q_nope_out, k_nope, k_nope, forward_batch, q_rope=q_pe, k_rope=k_pe
             )

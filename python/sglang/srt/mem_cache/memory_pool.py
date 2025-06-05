@@ -168,7 +168,10 @@ class KVCache(abc.ABC):
 
 
 class TokenToKVPoolAllocator:
-    """An allocator managing the indices to kv cache data."""
+    """
+    An allocator managing the indices to kv cache data.
+    only manage the free slots in the pool
+    """
 
     def __init__(
         self,
@@ -182,7 +185,7 @@ class TokenToKVPoolAllocator:
         self.device = device
         self.page_size = 1
 
-        self.free_slots = None
+        self.free_slots = None # all the free index in the pool
         self.is_not_in_free_group = True
         self.free_group = []
         self.clear()

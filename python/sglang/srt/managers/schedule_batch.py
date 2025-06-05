@@ -954,6 +954,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         if backup_state:
             state = self.token_to_kv_pool_allocator.backup_state()
 
+        # get free slots from allocator
         out_cache_loc = self.token_to_kv_pool_allocator.alloc(num_tokens)
         if out_cache_loc is None:
             phase_str = "Prefill" if self.forward_mode.is_extend() else "Decode"
@@ -1248,7 +1249,7 @@ class ScheduleBatch(ScheduleBatchDisaggregationDecodeMixin):
         self.input_ids = input_ids_tensor
         self.req_pool_indices = req_pool_indices_tensor
         self.seq_lens = seq_lens_tensor
-        self.out_cache_loc = out_cache_loc
+        self.out_cache_loc = out_cache_loc # where the kv cache is stored
         self.input_embeds = (
             torch.tensor(input_embeds).to(self.device, non_blocking=True)
             if input_embeds

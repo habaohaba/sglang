@@ -1367,7 +1367,7 @@ class Scheduler(
 
     def get_new_batch_prefill(self) -> Optional[ScheduleBatch]:
         """
-        get a new batch for prefill
+        get a new ScheduleBatch for prefill
         """
         # Check if the grammar is ready in the grammar queue
         if self.grammar_queue:
@@ -1417,7 +1417,7 @@ class Scheduler(
         if self.lora_paths:
             lora_set = set([req.lora_path for req in self.running_batch.reqs])
 
-        # Get requests from the waiting queue to a new prefill batch
+        # Get requests from the waiting queue to construct a new prefill ScheduleBatch
         for req in self.waiting_queue:
             # for each request in waiting queue
             if (

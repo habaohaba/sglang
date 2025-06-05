@@ -34,6 +34,7 @@ from sglang.srt.utils import set_weight_attrs
 
 logger = logging.getLogger(__name__)
 
+# quantization methods that support weight loader v2
 WEIGHT_LOADER_V2_SUPPORTED = [
     "CompressedTensorsLinearMethod",
     "AWQMarlinLinearMethod",
@@ -352,6 +353,7 @@ class ColumnParallelLinear(LinearBase):
             tp_size = get_tensor_model_parallel_world_size()
         self.tp_rank, self.tp_size = tp_rank, tp_size
         assert self.quant_method is not None
+        # calculate the output size of each rank
         self.output_size_per_partition = divide(self.output_size, tp_size)
         self.output_partition_sizes = [self.output_size_per_partition]
         # If QKV or MergedColumn, use output size of each partition.
@@ -1293,6 +1295,7 @@ class RowParallelLinear(LinearBase):
         bias_ = None if (self.tp_rank > 0 or self.skip_bias_add) else self.bias
         output_parallel = self.quant_method.apply(self, input_parallel, bias=bias_)
         if self.reduce_results and self.tp_size > 1:
+            # reduce the output of all the ranks when tp > 1 and reduce_results is set to True
             output = tensor_model_parallel_all_reduce(output_parallel)
         else:
             output = output_parallel

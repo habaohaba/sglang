@@ -936,6 +936,7 @@ class ModelRunner:
             assert self.is_draft_worker
 
         # initialize token to kv pool (kv cache pool)
+        # deepseek model config will use attention arch mla
         if self.use_mla_backend:
             self.token_to_kv_pool = MLATokenToKVPool(
                 self.max_total_num_tokens,
