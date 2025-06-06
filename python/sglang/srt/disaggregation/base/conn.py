@@ -9,7 +9,7 @@ from sglang.srt.server_args import ServerArgs
 
 
 class KVArgs:
-    engine_rank: int
+    engine_rank: int # tp rank
     kv_data_ptrs: list[int]
     kv_data_lens: list[int]
     kv_item_lens: list[int]

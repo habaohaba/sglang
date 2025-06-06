@@ -213,8 +213,8 @@ class MooncakeKVManager(BaseKVManager):
             # start thread for decode
             self.start_decode_thread()
             self.connection_pool: Dict[str, Dict[str, Union[str, int]]] = {} # receiver kv manager will have connection pool, mapping from bootstrap key to bootstrap info
-            self.prefill_tp_size_table: Dict[str, int] = {}
-            self.prefill_dp_size_table: Dict[str, int] = {}
+            self.prefill_tp_size_table: Dict[str, int] = {} # bootstrap addr -> tp size
+            self.prefill_dp_size_table: Dict[str, int] = {} # bootstrap addr -> dp size
         else:
             raise ValueError(
                 f"Unsupported DisaggregationMode: {self.disaggregation_mode}"
@@ -796,7 +796,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
         self.session_id = self.kv_mgr.get_session_id()
         self.kv_mgr.update_status(self.bootstrap_room, KVPoll.Bootstrapping)
         self.conclude_state = None
-        self.target_tp_rank= None
+        self.target_tp_rank= None # target tp rank for this kv receiver to receive kv cache
 
         if self.bootstrap_addr not in self.kv_mgr.prefill_dp_size_table:
             # new bootstrap addr, fetch prefill parallel info from bootstrap server
@@ -835,12 +835,14 @@ class MooncakeKVReceiver(BaseKVReceiver):
         # prefill tp size per dp rank
         prefill_tp_size_per_dp_rank = self.prefill_tp_size // self.prefill_dp_size
         if local_tp_size_per_dp_rank == prefill_tp_size_per_dp_rank:
+            # local tp size per dp rank is the same as prefill tp size per dp rank
             self.target_tp_rank = (
                 self.kv_mgr.kv_args.engine_rank % local_tp_size_per_dp_rank
             )
             self.required_dst_info_num = 1
             self.target_tp_ranks = [self.target_tp_rank]
         elif local_tp_size_per_dp_rank > prefill_tp_size_per_dp_rank:
+            # local tp size per dp rank is larger than prefill tp size per dp rank
             assert (
                 self.kv_mgr.is_mla_backend
             ), "PD with different TP sizes per DP rank is not yet supported for non-MLA models"
@@ -852,6 +854,7 @@ class MooncakeKVReceiver(BaseKVReceiver):
             )
             self.target_tp_ranks = [self.target_tp_rank]
         else:
+            # local tp size per dp rank is smaller than prefill tp size per dp rank
             assert (
                 self.kv_mgr.is_mla_backend
             ), "PD with different TP sizes per DP rank is not yet supported for non-MLA models"
@@ -860,7 +863,9 @@ class MooncakeKVReceiver(BaseKVReceiver):
             self.target_tp_ranks = [
                 rank
                 for rank in range(
+                    # [0, 1, 2, ..., local_tp_size_per_dp_rank - 1]
                     (self.kv_mgr.kv_args.engine_rank % local_tp_size_per_dp_rank)
+                    # how many prefill ranks map to one local tp rank
                     * (prefill_tp_size_per_dp_rank // local_tp_size_per_dp_rank),
                     (self.kv_mgr.kv_args.engine_rank % local_tp_size_per_dp_rank + 1)
                     * (prefill_tp_size_per_dp_rank // local_tp_size_per_dp_rank),

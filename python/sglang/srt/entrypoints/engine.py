@@ -558,7 +558,7 @@ def _launch_subprocesses(
     # all the scheduler processes
     scheduler_procs = []
     if server_args.dp_size == 1:
-        # data parallel size is 1, so only launch tensor parallel scheduler processes
+        # check data parallel size is 1, so only launch tensor parallel scheduler processes
         # Launch tensor parallel scheduler processes
         memory_saver_adapter = TorchMemorySaverAdapter.create(
             enable=server_args.enable_memory_saver

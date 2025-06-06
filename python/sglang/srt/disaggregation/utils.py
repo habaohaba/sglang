@@ -187,6 +187,9 @@ def register_disaggregation_server(
 
 
 def is_mla_backend(target_kv_pool) -> bool:
+    """
+    check whether the kv pool is a MLA kv pool
+    """
     from sglang.srt.mem_cache.memory_pool import MLATokenToKVPool
 
     return isinstance(target_kv_pool, MLATokenToKVPool)

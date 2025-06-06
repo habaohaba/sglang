@@ -110,6 +110,12 @@ class DataParallelController:
         self.max_req_input_len = None
 
     def launch_dp_schedulers(self, server_args, port_args):
+        """
+        Launch data parallel workers.
+        each dp rank will have a tp group
+
+        Return:list of port args for each dp rank
+        """
         base_gpu_id = 0
 
         threads = []
@@ -121,6 +127,7 @@ class DataParallelController:
             tmp_port_args = PortArgs.init_new(server_args)
             tmp_port_args.tokenizer_ipc_name = port_args.tokenizer_ipc_name
             tmp_port_args.detokenizer_ipc_name = port_args.detokenizer_ipc_name
+            # add dp rank port to port args
             dp_port_args.append(tmp_port_args)
 
             # This port is checked free in PortArgs.init_new.
@@ -169,6 +176,12 @@ class DataParallelController:
             time.sleep(30 * 24 * 3600)
 
     def launch_dp_attention_schedulers(self, server_args, port_args):
+        """
+        one tp group
+
+        Return:list of port args for each dp rank
+        """
+        # launch tp group with dp rank as None, dp rank will be calculated later
         self.launch_tensor_parallel_group(server_args, port_args, 0, None)
         dp_port_args = []
         for dp_rank in range(server_args.dp_size):
@@ -212,6 +225,7 @@ class DataParallelController:
 
                 if server_args.enable_dp_attention:
                     # dp attention has different sharding logic
+                    # dp rank will be calculated here
                     _, _, dp_rank = compute_dp_attention_world_info(
                         server_args.enable_dp_attention,
                         tp_rank,
@@ -258,6 +272,9 @@ class DataParallelController:
         self.max_req_input_len = scheduler_info[0]["max_req_input_len"]
 
     def round_robin_scheduler(self, req: Req):
+        """
+        Round-robin scheduler.
+        """
         if self.server_args.disaggregation_mode == "null":
             self.workers[self.round_robin_counter].send_pyobj(req)
             self.round_robin_counter = (self.round_robin_counter + 1) % len(
@@ -270,9 +287,14 @@ class DataParallelController:
         raise NotImplementedError()
 
     def event_loop(self):
+        """
+        The event loop for the data parallel controller.
+        """
+
         while True:
             while True:
                 try:
+                    # recv request from tokenizer
                     recv_req = self.recv_from_tokenizer.recv_pyobj(zmq.NOBLOCK)
                 except zmq.ZMQError:
                     break
@@ -284,6 +306,7 @@ class DataParallelController:
                         TokenizedEmbeddingReqInput,
                     ),
                 ):
+                    # dispatch request to data parallel workers
                     self.dispatching(recv_req)
                 else:
                     # Send other control messages to first worker of tp group
